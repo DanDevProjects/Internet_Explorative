@@ -4,3 +4,5 @@ on Mac: Right click (control-click) the app, then select open. if method one doe
 on Windows: on the blue SmartScreen window, click more info, then select open anyway.
 note: some websites might not load perfectly or simply will not load due to the PyQt5 engine. this project is better for basic and daily users.
 I also dont recommend banking on this browser as it lacks privacy configurations.
+to install on mac, open the dmg then drag the app to applications.
+on windows, move the exe in the opened zip file to wherever its convenient to you. (example, desktop)
