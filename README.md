@@ -1,8 +1,8 @@
 # Internet Explorative Web Browser
 
-> ⚠️ **Beta / AI-Generated Project**
+> ⚠️ **AI-Generated Experiment**
 >
-> This project is currently in beta and was developed with the help of AI. Things may not work perfectly, and you may encounter bugs, compatibility issues, or features that don't behave as expected.
+> This project and developed with the help of AI. Things may not work perfectly, and you may encounter bugs, compatibility issues, or features that don't behave as expected.
 
 ## Before You Download
 
@@ -25,14 +25,13 @@ Please keep the following in mind before installing:
 
 ### 🪟 Windows
 
-1. Download and extract the `.zip` file.
-2. Move the **entire unzipped folder** into `Program Files`.
-3. Open the installer and follow the installation steps as usual.
-4. Once installed, launch the browser from the **Start Menu**.
+1. Download the **Internet Explorative setup**.
+2. Open the installer and follow the installation steps as usual.
+3. Once installed, launch the browser from the **Start Menu**.
 
 ## ⚠️ "App Cannot Be Verified" / Security Warnings
 
-Depending on your operating system and security settings, you may see a warning saying that the application cannot be verified or that it was downloaded from an unidentified developer.
+Depending on your macOS version and security settings, you may see a warning saying that the application cannot be verified or that it was downloaded from an unidentified developer. This will only happen on macs.
 
 ### macOS
 
@@ -52,12 +51,6 @@ If that doesn't work:
 3. Look for the security warning about the application.
 4. Follow the on-screen instructions to allow the application to open.
 
-### Windows
-
-1. Open the installer.
-2. Follow the installation process normally.
-3. Once installation is complete, launch the browser from the **Start Menu**.
-
 ## 🌐 Website Compatibility
 
 Because this browser uses the **PyQt5 web engine**, some modern websites may not work correctly.
@@ -70,6 +63,7 @@ You may experience:
 * Compatibility issues with modern web applications
 
 For the best experience, this project is recommended for **basic and everyday browsing** rather than websites that require advanced browser features.
+If you want to emulate the **Internet Explorer** experience, check the box that says "emulate the IE11 user-agent" in settings.
 
 ## 🔐 Privacy & Security
 
