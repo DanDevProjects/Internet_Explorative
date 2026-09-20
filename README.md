@@ -1,78 +1,45 @@
-# Internet Explorative Web Browser
+**WARNING**
+This project is vibe-coded. Some bugs may still exist.
 
-> ⚠️ **AI-Generated Experiment**
->
-> This project and developed with the help of AI. Things may not work perfectly, and you may encounter bugs, compatibility issues, or features that don't behave as expected.
+### About Internet Explorative
+Internet Explorative is a lightweight and powerful web browser designed to mimic the Internet Explorer user interface added with many modern features such as an **adblocker**. Built on python and powered by PyQt6 with Chromium 140.0.7339.225. It only uses about less than 500 MB of RAM.
 
-## Before You Download
+**Announcement**
 
-Please keep the following in mind before installing:
+Internet Explorative is going Mac-Only because Windows already have the original built-in. For Windows Users, Please go download **rinFox** on https://github.com/travy-patty/rinfox/releases/tag/Release.
 
-* 🧪 This is a **beta project**, so bugs and unexpected behavior are possible.
-* 🤖 Parts of the project are **AI-generated** and may still require improvements.
-* 🌐 Some websites may not load correctly—or may not load at all—because the browser uses the **PyQt5 web engine**.
-* 👤 This browser is intended primarily for **basic and everyday browsing**.
-* 🔐 **Do not use this browser for banking or other sensitive activities.** It currently lacks advanced privacy and security configurations.
+### Read Before you download-- Requirements
+**Software**
 
-## Installation
+macOS 10.14 Mojave or later (10.15 Catalina recommended)
 
-### 🍎 macOS
+**Hardware**
 
-1. Download the `.dmg` file.
-2. Open the `.dmg`.
-3. Drag the browser application into your **Applications** folder.
-4. Launch the browser from Applications.
+*Processor*
 
-### 🪟 Windows
 
-1. Download the **Internet Explorative setup**.
-2. Open the installer and follow the installation steps as usual.
-3. Once installed, launch the browser from the **Start Menu**.
+Intel: Intel Xeon "Gainstown" (W35xx) or Any intel chip that supports Mojave
+Apple Silicon: M1 or Later
 
-## ⚠️ "App Cannot Be Verified" / Security Warnings
+*RAM*
 
-Depending on your macOS version and security settings, you may see a warning saying that the application cannot be verified or that it was downloaded from an unidentified developer. This will only happen on macs.
+4GB minimum, 8GB recommended
 
-### macOS
+*Storage*
 
-**Method 1:**
+700MB minimum, 1GB recommended
 
-1. Locate the application in Finder.
-2. **Right-click** (or Control-click) the app.
-3. Select **Open**.
-4. Confirm that you want to open it.
+### Bugs
 
-If that doesn't work:
+If you ever experience a bug, please report it on the discussions page or bug report file.
+I will try my best to fix it.
 
-**Method 2:**
+**Thank you!**
 
-1. Open **System Settings** (or **System Preferences** on older versions of macOS).
-2. Go to **Privacy & Security** or **Security & Privacy**.
-3. Look for the security warning about the application.
-4. Follow the on-screen instructions to allow the application to open.
 
-## 🌐 Website Compatibility
 
-Because this browser uses the **PyQt5 web engine**, some modern websites may not work correctly.
 
-You may experience:
 
-* Websites failing to load
-* Broken layouts
-* Missing features
-* Compatibility issues with modern web applications
 
-For the best experience, this project is recommended for **basic and everyday browsing** rather than websites that require advanced browser features.
-If you want to emulate the **Internet Explorer** experience, check the box that says "emulate the IE11 user-agent" in settings.
 
-## 🔐 Privacy & Security
 
-**Please do not use this browser for banking, online payments, or other highly sensitive activities.**
-
-The browser currently does not provide the same level of privacy and security configuration as established browsers. Use it at your own discretion and avoid entering sensitive information.
-
-## 📌 Final Note
-
-This project is still being developed. If something doesn't work, it may be a limitation of the current version, the PyQt5 engine, or the website you're trying to access.
-
-Thanks for trying it out! 🚀
