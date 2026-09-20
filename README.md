@@ -6,7 +6,7 @@ Internet Explorative is a lightweight and powerful web browser designed to mimic
 
 **Announcement**
 
-Internet Explorative is going Mac-Only because Windows already have the original built-in. For Windows Users, Please go download **rinFox** on https://github.com/travy-patty/rinfox/releases/tag/Release.
+Internet Explorative is going Mac-Only because Windows already have the original built-in. For Windows Users, Please go download **rinFox** on https://github.com/travy-patty/rinfox/releases/tag/Release, or you can use WSL 2 to emulate the Mac app onto Windows.
 
 ### Read Before you download-- Requirements
 **Software**
