@@ -35,6 +35,10 @@ Apple Silicon: M1 or Later
 If you ever experience a bug, please report it on the discussions page or bug report file.
 I will try my best to fix it.
 
+### Issues
+
+If you had problem opening the latest fix release, go to system settings > privacy and security and open anyway. This is because its a pre-release and you should use 11.1 stable instead.
+
 **Thank you!**
 
 
