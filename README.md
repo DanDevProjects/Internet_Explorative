@@ -19,6 +19,7 @@ macOS 10.14 Mojave or later (10.15 Catalina recommended)
 
 
 Intel: Intel Xeon "Gainstown" (W35xx) or Any intel chip that supports Mojave
+
 Apple Silicon: M1 or Later
 
 *RAM*
