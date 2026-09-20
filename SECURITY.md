@@ -8,7 +8,7 @@ Currently, only **v11.1** is supported. I highly recommend using 11.1. 11.0.1 an
 | ------- | ------------------ | -----------------------|
 | 11.0.1  | ❌                 | Chromium 40~           |
 | 1.0 beta| ❌                 | Chromium 50~           |
-| 11.1.   | ✅              | Chromium 140.0.7339.225|
+| 11.1 builds  | ✅              | Chromium 140.0.7339.225|
 
 ## Reporting a Vulnerability
 To report a vulnerability, go to the **General** or **Ideas** discussion to report a bug, safely issues, or anything else you would like to fix.
