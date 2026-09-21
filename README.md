@@ -6,12 +6,14 @@ Internet Explorative is a lightweight and powerful web browser designed to mimic
 
 **Announcement**
 
-Internet Explorative is going Mac-Only because Windows already have the original built-in. For Windows Users, Please go download **rinFox** on https://github.com/travy-patty/rinfox/releases/tag/Release, or you can use WSL 2 to emulate the Mac app onto Windows.
+Internet Explorative is going Mac-first because Windows already have the original built-in. Windows versions still exist, but you'll have to wait for one more major release. For Windows Users in a rush, Please go download **rinFox** on https://github.com/travy-patty/rinfox/releases/tag/Release, or you can use WSL 2 to emulate the Mac app onto Windows.
 
 ### Read Before you download-- Requirements
 **Software**
 
 macOS 10.14 Mojave or later (10.15 Catalina recommended)
+
+Windows 10 or later
 
 **Hardware**
 
@@ -22,6 +24,8 @@ Intel: Intel Xeon "Gainstown" (W35xx) or Any intel chip that supports Mojave
 
 Apple Silicon: M1 or Later
 
+Or any CPU that supports Windows 10 (around 2005 and later CPUs)
+12
 *RAM*
 
 4GB minimum, 8GB recommended
