@@ -2,13 +2,13 @@
 
 ## Supported Versions
 
-Currently, only **v11.1** is supported. I highly recommend using 11.1. 11.0.1 and 1.0 beta is based on Legacy Chromium (Chromium 40~80) while **11.1** is based on Chromium 140.0.7339.225.
+Currently, only **v11.1** is supported. I highly recommend using 11.1. 11.0.1 and 1.0 beta is based on Legacy Chromium (Chromium 40~80) while **11.1** is based on Chromium 140.0.7339.225 (Which was released in September of 2025).
 
-| Version | Supported          | Chromium version               |
-| ------- | ------------------ | -----------------------|
-| 11.0.1  | ❌                 | Chromium 40~           |
-| 1.0 beta| ❌                 | Chromium 50~           |
-| 11.1 builds  | ✅              | Chromium 140.0.7339.225|
+| Version | Supported          | Chromium version        | PyQt Version |
+| ------- | ------------------ | -----------------------|-------------   |
+| 1.0 beta  | ❌                 | Chromium 40~          | PyQt5            |
+| 11.0.1  | ❌                 | Chromium 50~           |  PyQt5          |
+| 11.1 builds  | ✅              | Chromium 140.0.7339.225|   PyQt6.11      |
 
 ## Reporting a Vulnerability
 To report a vulnerability, go to the **General** or **Ideas** discussion to report a bug, safely issues, or anything else you would like to fix.
