@@ -19,7 +19,7 @@
 
 **Internet Explorative** is a lightweight, privacy-focused web browser designed to recreate the familiar look and feel of **Internet Explorer** while bringing it into the modern web.
 
-Built with **Python** and **PyQt6**, Internet Explorative uses **Qt WebEngine** and Chromium 140.0.7339.225 to provide a modern browsing experience while maintaining an Internet Explorer-inspired interface.
+Built with **Python** and **PyQt6.11**, Internet Explorative uses **Qt WebEngine** and Chromium 140.0.7339.225 to provide a modern browsing experience while maintaining an Internet Explorer-inspired interface.
 
 ### Features
 
@@ -71,7 +71,7 @@ Internet Explorative does not require:
 
 The project is independently developed and does not have the infrastructure or intention to store users' browsing history.
 
-The default search engine is currently Google, but you can also configure the browser to use **DuckDuckGo**.
+The default search engine is now **DuckDuckGo** for security, though you can still change it back to **Google**.
 
 ---
 
@@ -99,15 +99,15 @@ Older Intel processors may work if the operating system itself supports them.
 
 **Apple Silicon**
 
-- M1 or later
+M1 or later
 
 **Windows**
 
-Any processor capable of running Windows 10 or later should generally be sufficient.
+Any processor capable of running Windows 10 or later and meet the minimum requirements should generally be sufficient.
 
 ### Memory
 
-- **4 GB minimum, 8 GB recommended**
+- **4 GB, 8 GB recommended for smooth experience**
 
 ### Storage
 
