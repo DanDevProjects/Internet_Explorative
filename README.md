@@ -111,7 +111,7 @@ Any processor capable of running Windows 10 or later and meet the minimum requir
 
 ### Storage
 
-- **700 MB:** Minimum recommended free space, though 1 GB is recommended.
+- **700 MB:** Minimum free space, though 1 GB is recommended.
 
 ---
 
