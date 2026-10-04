@@ -1,6 +1,7 @@
 import multiprocessing
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import urllib.parse
@@ -9,6 +10,8 @@ from PyQt6 import QtCore, QtGui
 from PyQt6.QtCore import (
     PYQT_VERSION_STR,
     QT_VERSION_STR,
+    QCoreApplication,
+    QPropertyAnimation,
     QSettings,
     QSize,
     Qt,
@@ -38,16 +41,20 @@ from PyQt6.QtWidgets import (
     QAbstractButton,
     QApplication,
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QGraphicsOpacityEffect,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -63,8 +70,32 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+DEFAULT_HOME_URL = "https://start.me/p/ogowEx/start"
 MODERN_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 IE_UA = "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko"
+PROFILES_ROOT = os.path.join(os.path.expanduser("~"), ".ie_explorative_profiles")
+
+
+def get_available_profiles():
+    os.makedirs(PROFILES_ROOT, exist_ok=True)
+    profiles = [
+        d for d in os.listdir(PROFILES_ROOT)
+        if os.path.isdir(os.path.join(PROFILES_ROOT, d))
+    ]
+    if not profiles:
+        profiles = ["Default"]
+    return profiles
+
+
+def get_profile_display_name(profile_dir_name):
+    """Retrieves the custom user display name for a given profile directory."""
+    config_path = os.path.join(PROFILES_ROOT, profile_dir_name, "profile_config.ini")
+    if os.path.exists(config_path):
+        settings = QSettings(config_path, QSettings.Format.IniFormat)
+        user_name = settings.value("user_name", "")
+        if user_name and str(user_name).strip():
+            return str(user_name).strip()
+    return profile_dir_name
 
 
 class AdBlockInterceptor(QWebEngineUrlRequestInterceptor):
@@ -104,23 +135,28 @@ class SelectAllLineEdit(QLineEdit):
 
 
 class IEWebPage(QWebEnginePage):
-    def __init__(self, browser_window, profile=None):
+    def __init__(self, view, browser_window, profile=None):
         if profile:
-            super().__init__(profile, browser_window)
+            super().__init__(profile, view)
         else:
-            super().__init__(browser_window)
+            super().__init__(view)
         self.browser_window = browser_window
         self.custom_url = ""
 
+    def get_accent_color(self):
+        return getattr(self.browser_window, "accent_color", "#0078d7")
+
+    def get_user_name(self):
+        return getattr(self.browser_window, "user_name", "Explorer")
+
     def acceptNavigationRequest(self, url, nav_type, is_main_frame):
         url_str = url.toString().lower().strip().rstrip("/")
-        if "ie://welcome" in url_str or url_str == "ie:welcome":
-            QTimer.singleShot(0, self.load_welcome_html)
-            return False
-        elif "ie://info" in url_str or url_str == "ie:info":
+        if "ie://info" in url_str or url_str == "ie:info":
+            self.custom_url = "ie://info"
             QTimer.singleShot(0, self.load_info_html)
             return False
         elif "ie://snake" in url_str or url_str == "ie:snake":
+            self.custom_url = "ie://snake"
             QTimer.singleShot(0, self.load_snake_html)
             return False
 
@@ -132,40 +168,6 @@ class IEWebPage(QWebEnginePage):
     def createWindow(self, window_type):
         return self.browser_window.add_new_tab(qurl=None, label="Loading...", return_page=True)
 
-    def load_welcome_html(self):
-        self.custom_url = "ie://welcome"
-        if hasattr(self.browser_window, "url_bar"):
-            self.browser_window.url_bar.setText("ie://welcome")
-        html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>Welcome to Internet Explorative</title>
-            <style>
-                body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f7fa; color: #222; text-align: center; padding: 60px 20px; margin: 0; }
-                .card { background: white; max-width: 620px; margin: 0 auto; padding: 40px; border-radius: 8px; border: 1px solid #d0d7de; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-                h1 { color: #0078d7; font-size: 28px; margin-bottom: 10px; }
-                p { color: #555; font-size: 15px; line-height: 1.6; }
-                .version { font-size: 13px; color: #888; margin-top: 20px; }
-                .btn { display: inline-block; margin-top: 25px; background: #0078d7; color: white; padding: 10px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; }
-                .btn:hover { background: #005a9e; }
-            </style>
-        </head>
-        <body>
-            <div class="card">
-                <h1>Welcome to Internet Explorative</h1>
-                <p>Your browser is ready to explore the web with privacy and speed.</p>
-                <p>Default home page & search engine are set to <b>DuckDuckGo</b>.</p>
-                <a href="https://duckduckgo.com" class="btn">Start Browsing with DuckDuckGo</a>
-                <div class="version">Version 11.1.1</div>
-            </div>
-        </body>
-        </html>
-        """
-        self.setHtml(html, QUrl("about:blank"))
-        self.browser_window.update_tab_title(self, "Welcome")
-
     def load_info_html(self):
         self.custom_url = "ie://info"
         if hasattr(self.browser_window, "url_bar"):
@@ -175,6 +177,8 @@ class IEWebPage(QWebEnginePage):
         py_ver = sys.version.split()[0]
         os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
         ua = self.profile().httpUserAgent() or MODERN_UA
+        accent = self.get_accent_color()
+        user = self.get_user_name()
 
         html = f"""
         <!DOCTYPE html>
@@ -185,13 +189,13 @@ class IEWebPage(QWebEnginePage):
             <style>
                 body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f4f4f4; color: #222; padding: 30px; margin: 0; }}
                 .container {{ max-width: 800px; margin: 0 auto; }}
-                h1 {{ color: #0078d7; border-bottom: 2px solid #0078d7; padding-bottom: 10px; font-size: 24px; }}
+                h1 {{ color: {accent}; border-bottom: 2px solid {accent}; padding-bottom: 10px; font-size: 24px; }}
                 p {{ color: #555; font-size: 14px; }}
                 .card {{ background: white; border: 1px solid #d0d0d0; padding: 20px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); margin-top: 20px; }}
                 h3 {{ margin-top: 0; color: #333; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 8px; }}
                 table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
                 th, td {{ text-align: left; padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 13px; }}
-                th {{ background: #0078d7; color: white; width: 35%; }}
+                th {{ background: {accent}; color: white; width: 35%; }}
                 td {{ background: #fafafa; color: #333; }}
                 code {{ background: #eee; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 12px; }}
             </style>
@@ -201,10 +205,12 @@ class IEWebPage(QWebEnginePage):
                 <h1>Internet Explorative</h1>
                 <p>System specifications and runtime inspection page.</p>
                 <div class="card">
-                    <h3>System Specifications</h3>
+                    <h3>System & Profile Specifications</h3>
                     <table>
+                        <tr><th>Active Profile</th><td><b>{self.browser_window.current_profile_name}</b></td></tr>
+                        <tr><th>Profile User</th><td>{user}</td></tr>
                         <tr><th>Application Name</th><td>Internet Explorative</td></tr>
-                        <tr><th>Version</th><td>11.1.1</td></tr>
+                        <tr><th>Version</th><td>11.1.2</td></tr>
                         <tr><th>Developer</th><td>DanDevProjects</td></tr>
                         <tr><th>Rendering Engine</th><td>QtWebEngine / Chromium</td></tr>
                         <tr><th>Chromium Engine Version</th><td>{chromium_ver}</td></tr>
@@ -219,24 +225,24 @@ class IEWebPage(QWebEnginePage):
         </html>
         """
         self.setHtml(html, QUrl("about:blank"))
-        self.browser_window.update_tab_title(self, "Info")
 
     def load_snake_html(self):
         self.custom_url = "ie://snake"
         if hasattr(self.browser_window, "url_bar"):
             self.browser_window.url_bar.setText("ie://snake")
-        html = """
+        accent = self.get_accent_color()
+        html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
             <title>Explorative snake - Internet Explorative</title>
             <style>
-                body { background: #1e1e1e; color: #fff; font-family: 'Segoe UI', Arial, sans-serif; text-align: center; margin: 0; padding-top: 40px; }
-                h1 { color: #0078d7; margin-bottom: 5px; }
-                p { color: #aaa; font-size: 14px; }
-                canvas { background: #111; border: 2px solid #0078d7; box-shadow: 0 0 20px rgba(0,120,215,0.3); margin-top: 20px; }
-                .score { font-size: 20px; font-weight: bold; margin-top: 15px; color: #4ec9b0; }
+                body {{ background: #1e1e1e; color: #fff; font-family: 'Segoe UI', Arial, sans-serif; text-align: center; margin: 0; padding-top: 40px; }}
+                h1 {{ color: {accent}; margin-bottom: 5px; }}
+                p {{ color: #aaa; font-size: 14px; }}
+                canvas {{ background: #111; border: 2px solid {accent}; box-shadow: 0 0 20px rgba(0,120,215,0.3); margin-top: 20px; }}
+                .score {{ font-size: 20px; font-weight: bold; margin-top: 15px; color: #4ec9b0; }}
             </style>
         </head>
         <body>
@@ -251,42 +257,42 @@ class IEWebPage(QWebEnginePage):
                 let count = 0;
                 let score = 0;
 
-                let snake = { x: 160, y: 160, dx: grid, dy: 0, cells: [], maxCells: 4 };
-                let apple = { x: 320, y: 320 };
+                let snake = {{ x: 160, y: 160, dx: grid, dy: 0, cells: [], maxCells: 4 }};
+                let apple = {{ x: 320, y: 320 }};
 
-                function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min)) + min; }
+                function getRandomInt(min, max) {{ return Math.floor(Math.random() * (max - min)) + min; }}
 
-                function loop() {
+                function loop() {{
                     requestAnimationFrame(loop);
-                    if (++count < 6) { return; }
+                    if (++count < 6) {{ return; }}
                     count = 0;
                     ctx.clearRect(0,0,canvas.width,canvas.height);
 
                     snake.x += snake.dx; snake.y += snake.dy;
 
-                    if (snake.x < 0) { snake.x = canvas.width - grid; }
-                    else if (snake.x >= canvas.width) { snake.x = 0; }
-                    if (snake.y < 0) { snake.y = canvas.height - grid; }
-                    else if (snake.y >= canvas.height) { snake.y = 0; }
+                    if (snake.x < 0) {{ snake.x = canvas.width - grid; }}
+                    else if (snake.x >= canvas.width) {{ snake.x = 0; }}
+                    if (snake.y < 0) {{ snake.y = canvas.height - grid; }}
+                    else if (snake.y >= canvas.height) {{ snake.y = 0; }}
 
-                    snake.cells.unshift({x: snake.x, y: snake.y});
-                    if (snake.cells.length > snake.maxCells) { snake.cells.pop(); }
+                    snake.cells.unshift({{x: snake.x, y: snake.y}});
+                    if (snake.cells.length > snake.maxCells) {{ snake.cells.pop(); }}
 
                     ctx.fillStyle = 'red';
                     ctx.fillRect(apple.x, apple.y, grid-1, grid-1);
 
-                    ctx.fillStyle = '#0078d7';
-                    snake.cells.forEach(function(cell, index) {
+                    ctx.fillStyle = '{accent}';
+                    snake.cells.forEach(function(cell, index) {{
                         ctx.fillRect(cell.x, cell.y, grid-1, grid-1);
-                        if (cell.x === apple.x && cell.y === apple.y) {
+                        if (cell.x === apple.x && cell.y === apple.y) {{
                             snake.maxCells++;
                             score += 10;
                             document.getElementById('score').innerText = score;
                             apple.x = getRandomInt(0, 20) * grid;
                             apple.y = getRandomInt(0, 20) * grid;
-                        }
-                        for (let i = index + 1; i < snake.cells.length; i++) {
-                            if (cell.x === snake.cells[i].x && cell.y === snake.cells[i].y) {
+                        }}
+                        for (let i = index + 1; i < snake.cells.length; i++) {{
+                            if (cell.x === snake.cells[i].x && cell.y === snake.cells[i].y) {{
                                 snake.x = 160; snake.y = 160;
                                 snake.cells = []; snake.maxCells = 4;
                                 snake.dx = grid; snake.dy = 0;
@@ -294,17 +300,17 @@ class IEWebPage(QWebEnginePage):
                                 document.getElementById('score').innerText = score;
                                 apple.x = getRandomInt(0, 20) * grid;
                                 apple.y = getRandomInt(0, 20) * grid;
-                            }
-                        }
-                    });
-                }
+                            }}
+                        }}
+                    }});
+                }}
 
-                document.addEventListener('keydown', function(e) {
-                    if (e.which === 37 && snake.dx === 0) { snake.dx = -grid; snake.dy = 0; }
-                    else if (e.which === 38 && snake.dy === 0) { snake.dy = -grid; snake.dx = 0; }
-                    else if (e.which === 39 && snake.dx === 0) { snake.dx = grid; snake.dy = 0; }
-                    else if (e.which === 40 && snake.dy === 0) { snake.dy = grid; snake.dx = 0; }
-                });
+                document.addEventListener('keydown', function(e) {{
+                    if (e.which === 37 && snake.dx === 0) {{ snake.dx = -grid; snake.dy = 0; }}
+                    else if (e.which === 38 && snake.dy === 0) {{ snake.dy = -grid; snake.dx = 0; }}
+                    else if (e.which === 39 && snake.dx === 0) {{ snake.dx = grid; snake.dy = 0; }}
+                    else if (e.which === 40 && snake.dy === 0) {{ snake.dy = grid; snake.dx = 0; }}
+                }});
 
                 requestAnimationFrame(loop);
             </script>
@@ -312,7 +318,6 @@ class IEWebPage(QWebEnginePage):
         </html>
         """
         self.setHtml(html, QUrl("about:blank"))
-        self.browser_window.update_tab_title(self, "Snake")
 
 
 def load_ie11_icon(size=64):
@@ -391,6 +396,209 @@ class CustomTabBar(QTabBar):
         calc_width = int(available_width / count)
         final_width = max(60, min(140, calc_width))
         return QSize(final_width, 32)
+
+
+class ProfileSwitchOverlay(QWidget):
+    """Smooth visual animation card when switching profiles."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity_effect)
+        self.hide()
+
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.card = QWidget()
+        self.card.setObjectName("switchCard")
+        self.card.setFixedSize(320, 180)
+
+        card_layout = QVBoxLayout(self.card)
+        card_layout.setContentsMargins(30, 25, 30, 25)
+        card_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.icon_label = QLabel("👤")
+        self.icon_label.setStyleSheet("font-size: 42px;")
+        
+        self.title_label = QLabel("Switching Profile...")
+        self.title_label.setStyleSheet("font-size: 16px; font-weight: bold; font-family: 'Segoe UI', Arial;")
+
+        self.sub_label = QLabel("Loading settings & workspace")
+        self.sub_label.setStyleSheet("font-size: 12px; color: #888888; font-family: 'Segoe UI', Arial;")
+
+        card_layout.addWidget(self.icon_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        card_layout.addWidget(self.title_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        card_layout.addWidget(self.sub_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        layout.addWidget(self.card)
+
+        self.anim = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.anim.setDuration(250)
+
+    def start_switch(self, profile_name, accent_color, is_dark, on_middle_callback):
+        self.resize(self.parent().size())
+        self.raise_()
+
+        bg = "#1e1e1e" if is_dark else "#f0f0f0"
+        card_bg = "#2b2b2b" if is_dark else "#ffffff"
+        fg = "#ffffff" if is_dark else "#222222"
+
+        self.setStyleSheet(f"""
+            ProfileSwitchOverlay {{ background-color: {bg}; }}
+            #switchCard {{
+                background-color: {card_bg};
+                border: 2px solid {accent_color};
+                border-radius: 10px;
+            }}
+            QLabel {{ color: {fg}; }}
+        """)
+
+        display_name = get_profile_display_name(profile_name)
+        self.title_label.setText(f"Switching to {display_name}")
+        self.opacity_effect.setOpacity(0.0)
+        self.show()
+
+        try:
+            self.anim.finished.disconnect()
+        except TypeError:
+            pass
+
+        self.anim.setStartValue(0.0)
+        self.anim.setEndValue(1.0)
+
+        def on_fade_in():
+            on_middle_callback()
+            QTimer.singleShot(200, start_fade_out)
+
+        def start_fade_out():
+            try:
+                self.anim.finished.disconnect()
+            except TypeError:
+                pass
+            self.anim.setStartValue(1.0)
+            self.anim.setEndValue(0.0)
+            self.anim.finished.connect(self.hide)
+            self.anim.start()
+
+        self.anim.finished.connect(on_fade_in)
+        self.anim.start()
+
+
+class ProfileManagerDialog(QDialog):
+    """Dialog inside Tools menu to manage, add, or delete browser profiles."""
+    def __init__(self, current_profile, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Manage Profiles")
+        self.resize(440, 280)
+        self.active_profile = current_profile
+        self.selected_profile = current_profile
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        layout.addWidget(QLabel("<b>Select Profile:</b>"))
+
+        self.list_widget = QListWidget()
+        self.profiles = get_available_profiles()
+        for p in self.profiles:
+            display_name = get_profile_display_name(p)
+            entry_text = f"{display_name} [{p}]" if display_name != p else p
+            item = QListWidgetItem(entry_text)
+            self.list_widget.addItem(item)
+            if p == current_profile:
+                self.list_widget.setCurrentItem(item)
+
+        layout.addWidget(self.list_widget)
+
+        btn_layout = QHBoxLayout()
+        switch_btn = QPushButton("Switch Profile")
+        switch_btn.clicked.connect(self.switch_profile)
+
+        new_btn = QPushButton("+ New Profile")
+        new_btn.clicked.connect(self.create_profile)
+
+        delete_btn = QPushButton("Delete Profile")
+        delete_btn.clicked.connect(self.delete_profile)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.reject)
+
+        btn_layout.addWidget(switch_btn)
+        btn_layout.addWidget(new_btn)
+        btn_layout.addWidget(delete_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+    def switch_profile(self):
+        row = self.list_widget.currentRow()
+        if 0 <= row < len(self.profiles):
+            self.selected_profile = self.profiles[row]
+            self.accept()
+
+    def create_profile(self):
+        name, ok = QInputDialog.getText(self, "New Profile", "Enter new profile name:")
+        if ok and name.strip():
+            clean_name = name.strip()
+            p_dir = os.path.join(PROFILES_ROOT, clean_name)
+            os.makedirs(p_dir, exist_ok=True)
+            self.selected_profile = clean_name
+            self.accept()
+
+    def delete_profile(self):
+        row = self.list_widget.currentRow()
+        if not (0 <= row < len(self.profiles)):
+            QMessageBox.warning(self, "Selection Required", "Please select a profile to delete.")
+            return
+
+        target_profile = self.profiles[row]
+
+        if target_profile == self.active_profile:
+            QMessageBox.warning(
+                self,
+                "Cannot Delete Active Profile",
+                "You cannot delete the currently active profile. Please switch to another profile first.",
+            )
+            return
+
+        if len(self.profiles) <= 1:
+            QMessageBox.warning(
+                self,
+                "Cannot Delete Profile",
+                "At least one profile must remain.",
+            )
+            return
+
+        display_name = get_profile_display_name(target_profile)
+        reply = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to permanently delete profile '{display_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            p_dir = os.path.join(PROFILES_ROOT, target_profile)
+            if os.path.exists(p_dir):
+                shutil.rmtree(p_dir, ignore_errors=True)
+
+            if self.parent() and hasattr(self.parent(), "profiles_cache"):
+                self.parent().profiles_cache.pop(target_profile, None)
+
+            self.profiles.pop(row)
+            self.list_widget.takeItem(row)
+
+            if self.parent() and hasattr(self.parent(), "rebuild_profile_menus"):
+                self.parent().rebuild_profile_menus()
+
+            QMessageBox.information(
+                self,
+                "Profile Deleted",
+                f"Profile '{display_name}' has been deleted.",
+            )
 
 
 class ShareDialog(QDialog):
@@ -581,12 +789,15 @@ class ManageFavoritesDialog(QDialog):
 
 class InternetOptionsDialog(QDialog):
     def __init__(
-        self, current_home, current_engine, theme_mode, is_ie_ua, is_adblock, is_warn_close, history_list, is_dark_mode, parent=None
+        self, current_home, current_engine, theme_mode, is_ie_ua, is_adblock, is_warn_close, history_list, is_dark_mode, active_web_profile, current_accent="#0078d7", current_user="Explorer", parent=None
     ):
         super().__init__(parent)
         self.setWindowTitle("Internet Options & Settings")
         self.resize(760, 560)
         self.setMinimumSize(720, 500)
+
+        self.selected_accent = current_accent
+        self.web_profile = active_web_profile
 
         bg = "#2b2b2b" if is_dark_mode else "#f4f4f4"
         fg = "#ffffff" if is_dark_mode else "#222222"
@@ -610,18 +821,18 @@ class InternetOptionsDialog(QDialog):
             QComboBox QAbstractItemView {{
                 background-color: {input_bg};
                 color: {fg};
-                selection-background-color: #0078d7;
+                selection-background-color: {self.selected_accent};
                 selection-color: #ffffff;
                 border: 1px solid {border_col};
                 padding: 4px;
             }}
             QPushButton {{ background: {'#3a3a3a' if is_dark_mode else '#e1e1e1'}; border: 1px solid {border_col}; padding: 6px 16px; border-radius: 2px; color: {fg}; }}
-            QPushButton:hover {{ background: #0078d7; color: white; border-color: #0078d7; }}
+            QPushButton:hover {{ background: {self.selected_accent}; color: white; border-color: {self.selected_accent}; }}
             QGroupBox {{ font-weight: bold; font-size: 12px; border: 1px solid {border_col}; margin-top: 10px; padding-top: 12px; color: {fg}; }}
             QCheckBox {{ color: {fg}; spacing: 8px; }}
             QTabWidget::pane {{ border: 1px solid {border_col}; background: {bg}; border-radius: 2px; }}
             QTabBar::tab {{ background: {tab_bg}; padding: 8px 24px; margin-right: 6px; border-top-left-radius: 3px; border-top-right-radius: 3px; color: {fg}; min-width: 120px; font-weight: 500; }}
-            QTabBar::tab:selected {{ background: {tab_sel}; font-weight: bold; border-bottom: 2px solid #0078d7; color: {fg}; }}
+            QTabBar::tab:selected {{ background: {tab_sel}; font-weight: bold; border-bottom: 2px solid {self.selected_accent}; color: {fg}; }}
             QListWidget {{ background: {input_bg}; color: {fg}; border: 1px solid {border_col}; }}
         """)
 
@@ -633,14 +844,19 @@ class InternetOptionsDialog(QDialog):
         self.tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         layout.addWidget(self.tabs)
 
+        # Tab 1: General & Profile Personalization
         gen_widget = QWidget()
         gen_layout = QFormLayout(gen_widget)
         gen_layout.setContentsMargins(20, 20, 20, 20)
         gen_layout.setVerticalSpacing(16)
         gen_layout.setHorizontalSpacing(16)
 
+        self.user_name_input = QLineEdit(current_user)
+        self.user_name_input.setPlaceholderText("Enter your profile user name")
+        gen_layout.addRow("User Profile Name:", self.user_name_input)
+
         self.home_input = QLineEdit(current_home)
-        self.home_input.setPlaceholderText("https://duckduckgo.com or ie://welcome")
+        self.home_input.setPlaceholderText(DEFAULT_HOME_URL)
         gen_layout.addRow("Home Page:", self.home_input)
 
         self.search_engine = QComboBox()
@@ -654,6 +870,7 @@ class InternetOptionsDialog(QDialog):
         gen_layout.addRow("Default Search:", self.search_engine)
         self.tabs.addTab(gen_widget, "General")
 
+        # Tab 2: Appearance & Personalization
         app_widget = QWidget()
         app_layout = QFormLayout(app_widget)
         app_layout.setContentsMargins(20, 20, 20, 20)
@@ -664,6 +881,11 @@ class InternetOptionsDialog(QDialog):
         self.theme_combo.addItems(["Light", "Dark"])
         self.theme_combo.setCurrentText(theme_mode if theme_mode in ["Light", "Dark"] else "Light")
         app_layout.addRow("Theme Mode:", self.theme_combo)
+
+        self.accent_btn = QPushButton("Pick Custom Accent Color")
+        self.update_accent_btn_style()
+        self.accent_btn.clicked.connect(self.choose_accent_color)
+        app_layout.addRow("Accent Color:", self.accent_btn)
 
         self.ie_ua_cb = QCheckBox("Emulate Internet Explorer 11 User-Agent")
         self.ie_ua_cb.setChecked(is_ie_ua)
@@ -677,7 +899,7 @@ class InternetOptionsDialog(QDialog):
         self.warn_close_cb.setChecked(is_warn_close)
         app_layout.addRow("", self.warn_close_cb)
 
-        priv_box = QGroupBox("Temporary Files & Cookies")
+        priv_box = QGroupBox("Profile Temporary Files & Cookies")
         priv_layout = QHBoxLayout(priv_box)
         priv_layout.setContentsMargins(12, 12, 12, 12)
         priv_layout.setSpacing(10)
@@ -692,6 +914,7 @@ class InternetOptionsDialog(QDialog):
         app_layout.addRow(priv_box)
         self.tabs.addTab(app_widget, "Appearance")
 
+        # Tab 3: History
         hist_widget = QWidget()
         hist_layout = QVBoxLayout(hist_widget)
         hist_layout.setContentsMargins(20, 20, 20, 20)
@@ -724,6 +947,17 @@ class InternetOptionsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    def choose_accent_color(self):
+        color = QColorDialog.getColor(QColor(self.selected_accent), self, "Select Accent Color")
+        if color.isValid():
+            self.selected_accent = color.name()
+            self.update_accent_btn_style()
+
+    def update_accent_btn_style(self):
+        self.accent_btn.setStyleSheet(
+            f"background-color: {self.selected_accent}; color: white; font-weight: bold; border-radius: 3px;"
+        )
+
     def delete_selected_history(self):
         row = self.hist_list_widget.currentRow()
         if 0 <= row < len(self.history_list):
@@ -739,19 +973,24 @@ class InternetOptionsDialog(QDialog):
         self.history_modified = True
 
     def clear_cache(self):
-        QWebEngineProfile.defaultProfile().clearHttpCache()
-        QMessageBox.information(self, "Cache Cleared", "Temporary internet cache cleared.")
+        if self.web_profile:
+            self.web_profile.clearHttpCache()
+            QMessageBox.information(self, "Cache Cleared", "Temporary cache for this profile cleared.")
 
     def clear_cookies(self):
-        QWebEngineProfile.defaultProfile().cookieStore().deleteAllCookies()
-        QMessageBox.information(self, "Cookies Cleared", "All browsing cookies cleared.")
+        if self.web_profile:
+            self.web_profile.cookieStore().deleteAllCookies()
+            QMessageBox.information(self, "Cookies Cleared", "All cookies for this profile cleared.")
 
     def get_settings(self):
         home_text = self.home_input.text().strip()
+        user_name = self.user_name_input.text().strip()
         return {
-            "home": home_text if home_text else "https://duckduckgo.com",
+            "home": home_text if home_text else DEFAULT_HOME_URL,
+            "user_name": user_name if user_name else "Explorer",
             "engine": self.search_engine.currentText(),
             "theme_mode": self.theme_combo.currentText(),
+            "accent_color": self.selected_accent,
             "ie_ua": self.ie_ua_cb.isChecked(),
             "adblock": self.adblock_cb.isChecked(),
             "warn_close": self.warn_close_cb.isChecked(),
@@ -785,7 +1024,7 @@ class AboutIEDialog(QDialog):
             " #0076d6;'><b>Internet</b> Explorative</span>"
         )
         ver_label = QLabel(
-            "Internet Explorative version: 11.1.1<br><b>Engine:</b>"
+            "Internet Explorative version: 11.1.2<br><b>Engine:</b>"
             " PyQt6 (Chromium 140)"
         )
         info_layout.addWidget(title_label)
@@ -812,38 +1051,21 @@ class IE11Browser(QMainWindow):
         self.setWindowIcon(load_ie11_icon(32))
         self.resize(1240, 820)
 
-        self.settings = QSettings("DanDevProjects", "InternetExplorative")
-
-        saved_home = self.settings.value("home_page", "https://duckduckgo.com")
-        self.home_url = str(saved_home) if saved_home else "https://duckduckgo.com"
-
-        self.search_engine = self.settings.value("search_engine", "DuckDuckGo")
-
-        saved_theme = self.settings.value("theme_mode", "Light")
-        self.theme_mode = saved_theme if saved_theme in ["Dark", "Light"] else "Light"
-        self.is_dark_mode = self.resolve_dark_mode()
-
-        self.is_ie_ua = self.settings.value("ie_ua", False, type=bool)
-        self.is_adblock = self.settings.value("adblock", True, type=bool)
-        self.warn_on_close = self.settings.value("warn_on_close", True, type=bool)
-        self.downloads_history = []
-
         self.adblock_interceptor = AdBlockInterceptor()
-        self.adblock_interceptor.enabled = self.is_adblock
+        self.current_profile_name = "Default"
+        self.web_profile = None
+        self.settings = None
+        self.profiles_cache = {}  # Cache active QWebEngineProfiles to prevent crash / release warnings
 
-        profile = QWebEngineProfile.defaultProfile()
-        profile.setUrlRequestInterceptor(self.adblock_interceptor)
-        profile.downloadRequested.connect(self.handle_download)
+        self.init_ui()
+        self.load_profile("Default", is_initial=True)
 
-        web_settings = profile.settings()
-        web_settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
-        web_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "switch_overlay") and self.switch_overlay.isVisible():
+            self.switch_overlay.resize(self.size())
 
-        if self.is_ie_ua:
-            profile.setHttpUserAgent(IE_UA)
-        else:
-            profile.setHttpUserAgent(MODERN_UA)
-
+    def init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         self.main_layout = QVBoxLayout(central_widget)
@@ -859,18 +1081,14 @@ class IE11Browser(QMainWindow):
         self.back_btn.setFixedSize(42, 42)
         self.back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.back_btn.clicked.connect(self.navigate_back)
-        header_layout.addWidget(
-            self.back_btn, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
+        header_layout.addWidget(self.back_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.forward_btn = QToolButton()
         self.forward_btn.setProperty("class", "navBtn")
         self.forward_btn.setText("→")
         self.forward_btn.setFixedSize(32, 32)
         self.forward_btn.clicked.connect(self.navigate_forward)
-        header_layout.addWidget(
-            self.forward_btn, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
+        header_layout.addWidget(self.forward_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.reload_btn = QToolButton()
         self.reload_btn.setObjectName("reloadBtn")
@@ -878,53 +1096,37 @@ class IE11Browser(QMainWindow):
         self.reload_btn.setFixedSize(32, 32)
         self.reload_btn.setToolTip("Reload Page")
         self.reload_btn.clicked.connect(self.navigate_reload)
-        header_layout.addWidget(
-            self.reload_btn, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
+        header_layout.addWidget(self.reload_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.url_bar = SelectAllLineEdit()
         self.url_bar.setObjectName("urlBar")
         self.url_bar.setFixedHeight(32)
-        self.url_bar.setPlaceholderText(
-            "Search, enter web address, or ie://info"
-        )
+        self.url_bar.setPlaceholderText("Search, enter web address, or ie://info")
         self.url_bar.returnPressed.connect(self.navigate_to_url)
 
-        header_layout.addWidget(
-            self.url_bar, stretch=3, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
+        header_layout.addWidget(self.url_bar, stretch=3, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.tab_bar = CustomTabBar()
         self.tab_bar.setMovable(True)
-        self.tab_bar.setSelectionBehaviorOnRemove(
-            QTabBar.SelectionBehavior.SelectPreviousTab
-        )
+        self.tab_bar.setSelectionBehaviorOnRemove(QTabBar.SelectionBehavior.SelectPreviousTab)
         self.tab_bar.tabCloseRequested.connect(self.close_tab)
         self.tab_bar.currentChanged.connect(self.current_tab_changed)
-        header_layout.addWidget(
-            self.tab_bar, stretch=2, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
+        header_layout.addWidget(self.tab_bar, stretch=2, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.add_tab_btn = QToolButton()
         self.add_tab_btn.setProperty("class", "navBtn")
         self.add_tab_btn.setText("+")
         self.add_tab_btn.setToolTip("Open New Tab")
         self.add_tab_btn.setFixedSize(32, 32)
-        self.add_tab_btn.clicked.connect(
-            lambda: self.add_new_tab(QUrl(self.home_url), "New Tab")
-        )
-        header_layout.addWidget(
-            self.add_tab_btn, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
+        self.add_tab_btn.clicked.connect(lambda: self.add_new_tab(QUrl(self.home_url), "New Tab"))
+        header_layout.addWidget(self.add_tab_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.home_btn = QToolButton()
         self.home_btn.setProperty("class", "navBtn")
         self.home_btn.setText("🏠")
         self.home_btn.setFixedSize(32, 32)
         self.home_btn.clicked.connect(self.navigate_home)
-        header_layout.addWidget(
-            self.home_btn, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
+        header_layout.addWidget(self.home_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.fav_btn = QToolButton()
         self.fav_btn.setProperty("class", "navBtn")
@@ -932,10 +1134,9 @@ class IE11Browser(QMainWindow):
         self.fav_btn.setToolTip("Add to Favorites")
         self.fav_btn.setFixedSize(32, 32)
         self.fav_btn.clicked.connect(self.add_bookmark)
-        header_layout.addWidget(
-            self.fav_btn, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
+        header_layout.addWidget(self.fav_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
+        # Actions for Tools Dropdown & Menubar
         downloads_act = QAction("View Downloads", self)
         downloads_act.triggered.connect(self.show_downloads)
 
@@ -951,6 +1152,7 @@ class IE11Browser(QMainWindow):
         about_act = QAction("About Internet Explorative", self)
         about_act.triggered.connect(self.show_about_dialog)
 
+        # Gear / Tools Button with Menu
         self.tools_btn = QToolButton()
         self.tools_btn.setProperty("class", "navBtn")
         self.tools_btn.setObjectName("toolsBtn")
@@ -959,18 +1161,22 @@ class IE11Browser(QMainWindow):
         self.tools_btn.setFixedSize(32, 32)
         self.tools_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 
-        tools_dropdown = QMenu(self)
-        tools_dropdown.addAction(share_act)
-        tools_dropdown.addAction(downloads_act)
-        tools_dropdown.addSeparator()
-        tools_dropdown.addAction(options_act)
-        tools_dropdown.addAction(delete_fav_act)
-        tools_dropdown.addSeparator()
-        tools_dropdown.addAction(about_act)
-        self.tools_btn.setMenu(tools_dropdown)
-        header_layout.addWidget(
-            self.tools_btn, alignment=Qt.AlignmentFlag.AlignVCenter
-        )
+        self.tools_dropdown = QMenu(self)
+        
+        # Switch Profile Submenu inside Tools
+        self.profile_menu = QMenu("Switch Profile", self)
+        self.tools_dropdown.addMenu(self.profile_menu)
+        self.tools_dropdown.addSeparator()
+
+        self.tools_dropdown.addAction(share_act)
+        self.tools_dropdown.addAction(downloads_act)
+        self.tools_dropdown.addSeparator()
+        self.tools_dropdown.addAction(options_act)
+        self.tools_dropdown.addAction(delete_fav_act)
+        self.tools_dropdown.addSeparator()
+        self.tools_dropdown.addAction(about_act)
+        self.tools_btn.setMenu(self.tools_dropdown)
+        header_layout.addWidget(self.tools_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.main_layout.addLayout(header_layout)
 
@@ -982,14 +1188,16 @@ class IE11Browser(QMainWindow):
         self.web_stack = QStackedWidget()
         self.main_layout.addWidget(self.web_stack)
 
+        # Profile switch animation overlay
+        self.switch_overlay = ProfileSwitchOverlay(self)
+
+        # Menu Bar setup
         menubar = self.menuBar()
         file_menu = menubar.addMenu("File")
 
         new_tab_act = QAction("New Tab", self)
         new_tab_act.setShortcut("Ctrl+T")
-        new_tab_act.triggered.connect(
-            lambda: self.add_new_tab(QUrl(self.home_url), "New Tab")
-        )
+        new_tab_act.triggered.connect(lambda: self.add_new_tab(QUrl(self.home_url), "New Tab"))
         file_menu.addAction(new_tab_act)
 
         open_file_act = QAction("Open File...", self)
@@ -1033,6 +1241,9 @@ class IE11Browser(QMainWindow):
         self.fav_menu_obj.addSeparator()
 
         tools_menu = menubar.addMenu("Tools")
+        self.menubar_profile_menu = QMenu("Profiles", self)
+        tools_menu.addMenu(self.menubar_profile_menu)
+        tools_menu.addSeparator()
         tools_menu.addAction(share_act)
         tools_menu.addAction(downloads_act)
         tools_menu.addSeparator()
@@ -1040,9 +1251,6 @@ class IE11Browser(QMainWindow):
         tools_menu.addAction(delete_fav_act)
 
         help_menu = menubar.addMenu("Help")
-        welcome_act = QAction("Welcome Screen (ie://welcome)", self)
-        welcome_act.triggered.connect(lambda: self.add_new_tab(QUrl("ie://welcome"), "Welcome"))
-        help_menu.addAction(welcome_act)
         info_act = QAction("System Information (ie://info)", self)
         info_act.triggered.connect(lambda: self.add_new_tab(QUrl("ie://info"), "Info"))
         help_menu.addAction(info_act)
@@ -1050,28 +1258,149 @@ class IE11Browser(QMainWindow):
         help_menu.addAction(about_act)
 
         self.setStatusBar(QStatusBar(self))
-        self.apply_theme()
-        self.load_bookmarks()
 
-        first_run = not self.settings.value("first_run_completed", False, type=bool)
-        if first_run:
-            self.settings.setValue("first_run_completed", True)
-            self.add_new_tab(QUrl("ie://welcome"), "Welcome")
-        else:
+    def load_profile(self, profile_name: str, is_initial=False):
+        """Loads and switches to an isolated profile."""
+        def apply_profile_changes():
+            # Safely clear open tabs and detach pages before changing active profile
+            if not is_initial:
+                while self.web_stack.count() > 0:
+                    widget = self.web_stack.widget(0)
+                    self.web_stack.removeWidget(widget)
+                    if isinstance(widget, QWebEngineView):
+                        widget.stop()
+                        page = widget.page()
+                        widget.setPage(None)
+                        if page:
+                            page.deleteLater()
+                        widget.deleteLater()
+                while self.tab_bar.count() > 0:
+                    self.tab_bar.removeTab(0)
+                QCoreApplication.processEvents()
+
+            self.current_profile_name = profile_name
+            profile_dir = os.path.join(PROFILES_ROOT, profile_name)
+            os.makedirs(profile_dir, exist_ok=True)
+
+            config_path = os.path.join(profile_dir, "profile_config.ini")
+            self.settings = QSettings(config_path, QSettings.Format.IniFormat)
+
+            # Retrieve or initialize persistent QWebEngineProfile
+            if profile_name not in self.profiles_cache:
+                p = QWebEngineProfile(f"ie_profile_{profile_name}", self)
+                p.setPersistentStoragePath(os.path.join(profile_dir, "web_storage"))
+                p.setCachePath(os.path.join(profile_dir, "web_cache"))
+                p.downloadRequested.connect(self.handle_download)
+                self.profiles_cache[profile_name] = p
+
+            self.web_profile = self.profiles_cache[profile_name]
+
+            saved_home = self.settings.value("home_page", DEFAULT_HOME_URL)
+            self.home_url = str(saved_home) if saved_home else DEFAULT_HOME_URL
+
+            self.user_name = str(self.settings.value("user_name", profile_name))
+            self.accent_color = str(self.settings.value("accent_color", "#0078d7"))
+            self.search_engine = str(self.settings.value("search_engine", "DuckDuckGo"))
+
+            saved_theme = self.settings.value("theme_mode", "Light")
+            self.theme_mode = saved_theme if saved_theme in ["Dark", "Light"] else "Light"
+            self.is_dark_mode = self.resolve_dark_mode()
+
+            self.is_ie_ua = self.settings.value("ie_ua", False, type=bool)
+            self.is_adblock = self.settings.value("adblock", True, type=bool)
+            self.warn_on_close = self.settings.value("warn_on_close", True, type=bool)
+            self.downloads_history = self.settings.value("downloads_history", [])
+            if not isinstance(self.downloads_history, list):
+                self.downloads_history = []
+
+            self.adblock_interceptor.enabled = self.is_adblock
+            self.web_profile.setUrlRequestInterceptor(self.adblock_interceptor)
+
+            web_settings = self.web_profile.settings()
+            web_settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+            web_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+
+            if self.is_ie_ua:
+                self.web_profile.setHttpUserAgent(IE_UA)
+            else:
+                self.web_profile.setHttpUserAgent(MODERN_UA)
+
+            self.apply_theme()
+            self.load_bookmarks()
+            self.rebuild_profile_menus()
+
             self.add_new_tab(QUrl(self.home_url), "New Tab")
+            if not is_initial:
+                display_name = get_profile_display_name(profile_name)
+                self.statusBar().showMessage(f"Switched to profile: {display_name}", 4000)
+
+        if is_initial:
+            apply_profile_changes()
+        else:
+            self.switch_overlay.start_switch(
+                profile_name,
+                getattr(self, "accent_color", "#0078d7"),
+                getattr(self, "is_dark_mode", False),
+                apply_profile_changes
+            )
+
+    def rebuild_profile_menus(self):
+        """Populates the Profiles submenus inside the Tools menu & Menubar with user display names."""
+        for menu in [self.profile_menu, self.menubar_profile_menu]:
+            menu.clear()
+            profiles = get_available_profiles()
+            for p in profiles:
+                display_name = get_profile_display_name(p)
+                label_str = display_name if display_name == p else f"{display_name} ({p})"
+                
+                label = f"✓ {label_str}" if p == self.current_profile_name else f"   {label_str}"
+                act = QAction(label, self)
+                act.triggered.connect(lambda checked, name=p: self.switch_profile_to(name))
+                menu.addAction(act)
+
+            menu.addSeparator()
+            manage_act = QAction("Manage Profiles...", self)
+            manage_act.triggered.connect(self.open_profile_manager)
+            menu.addAction(manage_act)
+
+    def switch_profile_to(self, profile_name: str):
+        if profile_name != self.current_profile_name:
+            self.load_profile(profile_name)
+
+    def open_profile_manager(self):
+        dialog = ProfileManagerDialog(self.current_profile_name, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if dialog.selected_profile:
+                self.switch_profile_to(dialog.selected_profile)
+
+    def cleanup_all_pages(self):
+        while self.web_stack.count() > 0:
+            widget = self.web_stack.widget(0)
+            self.web_stack.removeWidget(widget)
+            if isinstance(widget, QWebEngineView):
+                widget.stop()
+                page = widget.page()
+                widget.setPage(None)
+                if page:
+                    page.deleteLater()
+                widget.deleteLater()
+        QCoreApplication.processEvents()
 
     def closeEvent(self, event):
         if not self.warn_on_close:
+            self.cleanup_all_pages()
             event.accept()
             return
+        display_name = get_profile_display_name(self.current_profile_name)
         reply = QMessageBox.question(
             self,
             "Close Tabs?",
-            "Do you want to close all active tabs and exit Internet Explorative?",
+            f"Do you want to exit Internet Explorative ({display_name})?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
+            self.cleanup_all_pages()
             event.accept()
         else:
             event.ignore()
@@ -1094,15 +1423,16 @@ class IE11Browser(QMainWindow):
     def apply_theme(self):
         self.is_dark_mode = self.resolve_dark_mode()
 
-        profile = QWebEngineProfile.defaultProfile()
-        profile.settings().setAttribute(
-            QWebEngineSettings.WebAttribute.ForceDarkMode, self.is_dark_mode
-        )
+        if self.web_profile:
+            self.web_profile.settings().setAttribute(
+                QWebEngineSettings.WebAttribute.ForceDarkMode, self.is_dark_mode
+            )
 
         bg = "#1e1e1e" if self.is_dark_mode else "#f0f0f0"
         fg = "#ffffff" if self.is_dark_mode else "#222222"
         bar_bg = "#2d2d2d" if self.is_dark_mode else "#e1e1e1"
         tab_sel = "#383838" if self.is_dark_mode else "#ffffff"
+        accent = self.accent_color
 
         self.setStyleSheet(f"""
             QMainWindow {{ background-color: {bg}; }}
@@ -1114,17 +1444,17 @@ class IE11Browser(QMainWindow):
                 color: {fg};
             }}
             QMenuBar::item {{ padding: 3px 8px; color: {fg}; }}
-            QMenuBar::item:selected {{ background: #0078d7; color: white; }}
+            QMenuBar::item:selected {{ background: {accent}; color: white; }}
 
             QPushButton#backBtn {{
-                background-color: #0078d7;
+                background-color: {accent};
                 color: white;
                 border-radius: 21px;
                 font-weight: bold;
                 font-size: 22px;
                 border: none;
             }}
-            QPushButton#backBtn:hover:enabled {{ background-color: #005a9e; }}
+            QPushButton#backBtn:hover:enabled {{ opacity: 0.85; }}
             QPushButton#backBtn:disabled {{
                 background-color: {"#3a3a3a" if self.is_dark_mode else "#cccccc"};
                 color: {"#777777" if self.is_dark_mode else "#888888"};
@@ -1137,7 +1467,7 @@ class IE11Browser(QMainWindow):
                 color: {fg};
                 border-radius: 2px;
             }}
-            QToolButton.navBtn:hover {{ background: #0078d7; color: white; }}
+            QToolButton.navBtn:hover {{ background: {accent}; color: white; }}
 
             QToolButton#reloadBtn {{
                 background: transparent;
@@ -1147,7 +1477,7 @@ class IE11Browser(QMainWindow):
                 color: {fg};
                 border-radius: 2px;
             }}
-            QToolButton#reloadBtn:hover {{ background: #0078d7; color: white; }}
+            QToolButton#reloadBtn:hover {{ background: {accent}; color: white; }}
 
             QToolButton#toolsBtn::menu-indicator {{ image: none; width: 0px; }}
 
@@ -1174,7 +1504,7 @@ class IE11Browser(QMainWindow):
             }}
             QTabBar::tab:selected {{
                 background: {tab_sel};
-                border-top: 2px solid #0078d7;
+                border-top: 2px solid {accent};
                 font-weight: bold;
             }}
 
@@ -1194,7 +1524,7 @@ class IE11Browser(QMainWindow):
                 padding: 2px 6px;
                 color: {fg};
             }}
-            QToolBar#bookmarksBar QToolButton:hover {{ background: #0078d7; color: white; }}
+            QToolBar#bookmarksBar QToolButton:hover {{ background: {accent}; color: white; }}
         """)
 
     def current_browser(self):
@@ -1218,14 +1548,13 @@ class IE11Browser(QMainWindow):
                     "path": os.path.abspath(path),
                 }
             )
-            self.statusBar().showMessage(
-                f"Downloaded: {download_item.downloadFileName()}"
-            )
+            self.settings.setValue("downloads_history", self.downloads_history)
+            self.statusBar().showMessage(f"Downloaded: {download_item.downloadFileName()}")
             self.show_downloads()
 
     def add_new_tab(self, qurl=None, label="New Tab", return_page=False):
         browser = QWebEngineView()
-        page = IEWebPage(self, QWebEngineProfile.defaultProfile())
+        page = IEWebPage(browser, self, self.web_profile)
         browser.setPage(page)
 
         stack_index = self.web_stack.addWidget(browser)
@@ -1236,18 +1565,12 @@ class IE11Browser(QMainWindow):
         browser.setFocus()
 
         browser.urlChanged.connect(lambda q, b=browser: self.update_url(q, b))
-        browser.loadFinished.connect(
-            lambda ok, b=browser: self.handle_page_loaded(ok, b)
-        )
+        browser.loadFinished.connect(lambda ok, b=browser: self.handle_page_loaded(ok, b))
 
         if qurl is not None:
             if not qurl.isEmpty():
                 url_str = qurl.toString().lower().strip().rstrip("/")
-                if "ie://welcome" in url_str or url_str == "ie:welcome":
-                    page.custom_url = "ie://welcome"
-                    self.url_bar.setText("ie://welcome")
-                    QTimer.singleShot(0, page.load_welcome_html)
-                elif "ie://info" in url_str or url_str == "ie:info":
+                if "ie://info" in url_str or url_str == "ie:info":
                     page.custom_url = "ie://info"
                     self.url_bar.setText("ie://info")
                     QTimer.singleShot(0, page.load_info_html)
@@ -1263,14 +1586,6 @@ class IE11Browser(QMainWindow):
             return page
         return browser
 
-    def update_tab_title(self, page, title):
-        for i in range(self.web_stack.count()):
-            w = self.web_stack.widget(i)
-            if isinstance(w, QWebEngineView) and w.page() == page:
-                if i < self.tab_bar.count():
-                    self.tab_bar.setTabText(i, title)
-                break
-
     def handle_page_loaded(self, ok, browser):
         self.update_tab_state(browser)
         url_str = browser.url().toString()
@@ -1283,8 +1598,15 @@ class IE11Browser(QMainWindow):
                 widget_to_remove = self.web_stack.widget(index)
                 if widget_to_remove:
                     self.web_stack.removeWidget(widget_to_remove)
-                    widget_to_remove.deleteLater()
+                    if isinstance(widget_to_remove, QWebEngineView):
+                        widget_to_remove.stop()
+                        page = widget_to_remove.page()
+                        widget_to_remove.setPage(None)
+                        if page:
+                            page.deleteLater()
+                        widget_to_remove.deleteLater()
                 self.tab_bar.removeTab(index)
+                QCoreApplication.processEvents()
             else:
                 self.close()
 
@@ -1323,9 +1645,7 @@ class IE11Browser(QMainWindow):
         browser = self.current_browser()
         if browser and isinstance(browser.page(), IEWebPage):
             page = browser.page()
-            if page.custom_url == "ie://welcome":
-                QTimer.singleShot(0, page.load_welcome_html)
-            elif page.custom_url == "ie://info":
+            if page.custom_url == "ie://info":
                 QTimer.singleShot(0, page.load_info_html)
             elif page.custom_url == "ie://snake":
                 QTimer.singleShot(0, page.load_snake_html)
@@ -1335,14 +1655,10 @@ class IE11Browser(QMainWindow):
     def navigate_home(self):
         browser = self.current_browser()
         if browser:
-            target = self.home_url if self.home_url else "https://duckduckgo.com"
-            if "welcome" in target.lower() and isinstance(browser.page(), IEWebPage):
-                browser.page().custom_url = "ie://welcome"
-                QTimer.singleShot(0, browser.page().load_welcome_html)
-            else:
-                if isinstance(browser.page(), IEWebPage):
-                    browser.page().custom_url = ""
-                browser.setUrl(QUrl(target))
+            target = self.home_url if self.home_url else DEFAULT_HOME_URL
+            if isinstance(browser.page(), IEWebPage):
+                browser.page().custom_url = ""
+            browser.setUrl(QUrl(target))
 
     def navigate_to_url(self):
         text = self.url_bar.text().strip()
@@ -1350,21 +1666,21 @@ class IE11Browser(QMainWindow):
             return
 
         text_lower = text.lower().strip().rstrip("/")
-
-        if text_lower in ["ie://welcome", "ie:welcome", "welcome"]:
+        if any(k in text_lower for k in ["ie://info", "ie://snake", "ie:info", "ie:snake"]):
             browser = self.current_browser()
             if browser and isinstance(browser.page(), IEWebPage):
-                browser.page().load_welcome_html()
-            return
-        elif text_lower in ["ie://info", "ie:info", "info"]:
-            browser = self.current_browser()
-            if browser and isinstance(browser.page(), IEWebPage):
-                browser.page().load_info_html()
-            return
-        elif text_lower in ["ie://snake", "ie:snake", "snake"]:
-            browser = self.current_browser()
-            if browser and isinstance(browser.page(), IEWebPage):
-                browser.page().load_snake_html()
+                page = browser.page()
+                if "info" in text_lower:
+                    page.custom_url = "ie://info"
+                    QTimer.singleShot(0, page.load_info_html)
+                else:
+                    page.custom_url = "ie://snake"
+                    QTimer.singleShot(0, page.load_snake_html)
+            else:
+                if "info" in text_lower:
+                    self.add_new_tab(QUrl("ie://info"), "Info")
+                else:
+                    self.add_new_tab(QUrl("ie://snake"), "Snake")
             return
 
         if not text.startswith("http://") and not text.startswith("https://") and not text.startswith("about:"):
@@ -1381,9 +1697,7 @@ class IE11Browser(QMainWindow):
                     "Baidu": "https://www.baidu.com/s?wd=",
                     "Startpage": "https://www.startpage.com/sp/search?query=",
                 }
-                base = engines.get(
-                    self.search_engine, "https://duckduckgo.com/?q="
-                )
+                base = engines.get(self.search_engine, "https://duckduckgo.com/?q=")
                 text = base + text.replace(" ", "+")
 
         browser = self.current_browser()
@@ -1408,7 +1722,7 @@ class IE11Browser(QMainWindow):
         if index != -1 and index < self.tab_bar.count():
             page = browser.page()
             if isinstance(page, IEWebPage) and page.custom_url:
-                title_map = {"ie://welcome": "Welcome", "ie://info": "Info", "ie://snake": "Snake"}
+                title_map = {"ie://info": "Info", "ie://snake": "Snake"}
                 title = title_map.get(page.custom_url, "New Tab")
             else:
                 title = page.title() or "New Tab"
@@ -1454,9 +1768,7 @@ class IE11Browser(QMainWindow):
             return
         url = self.url_bar.text()
         title = browser.page().title() or url
-        if url.lower() == "ie://welcome":
-            title = "Welcome"
-        elif url.lower() == "ie://info":
+        if url.lower() == "ie://info":
             title = "Info"
         elif url.lower() == "ie://snake":
             title = "Explorative snake"
@@ -1470,25 +1782,22 @@ class IE11Browser(QMainWindow):
             bookmarks.append(new_bookmark)
             self.settings.setValue("saved_bookmarks", bookmarks)
             self.load_bookmarks()
+            display_name = get_profile_display_name(self.current_profile_name)
             QMessageBox.information(
-                self, "Favorites", "Added to Favorites Bar successfully!"
+                self, "Favorites", f"Added to Favorites in ({display_name}) profile!"
             )
 
     def delete_single_favorite(self):
         bookmarks = self.settings.value("saved_bookmarks", [])
         if not isinstance(bookmarks, list) or not bookmarks:
-            QMessageBox.information(
-                self, "Favorites", "No saved favorites to delete."
-            )
+            QMessageBox.information(self, "Favorites", "No saved favorites to delete.")
             return
 
         dialog = ManageFavoritesDialog(bookmarks, self)
         if dialog.exec() == QDialog.DialogCode.Accepted and dialog.deleted:
             self.settings.setValue("saved_bookmarks", dialog.get_bookmarks())
             self.load_bookmarks()
-            QMessageBox.information(
-                self, "Favorites", "Selected favorite deleted successfully."
-            )
+            QMessageBox.information(self, "Favorites", "Selected favorite deleted successfully.")
 
     def load_bookmarks(self):
         self.fav_menu_obj.clear()
@@ -1506,9 +1815,7 @@ class IE11Browser(QMainWindow):
             bookmarks = []
 
         if not bookmarks:
-            label = QLabel(
-                " <i>No bookmarks saved. Click ★ to add current page.</i> "
-            )
+            label = QLabel(" <i>No bookmarks saved. Click ★ to add current page.</i> ")
             label.setStyleSheet("color: #777; font-size: 11px;")
             self.bookmarks_bar.addWidget(label)
             return
@@ -1516,9 +1823,7 @@ class IE11Browser(QMainWindow):
         for bm in bookmarks:
             action = QAction(bm["title"], self)
             action.triggered.connect(
-                lambda checked, u=bm["url"]: self.add_new_tab(
-                    QUrl(u), "Bookmark"
-                )
+                lambda checked, u=bm["url"]: self.add_new_tab(QUrl(u), "Bookmark")
             )
             self.fav_menu_obj.addAction(action)
 
@@ -1526,9 +1831,7 @@ class IE11Browser(QMainWindow):
             btn.setText("★ " + bm["title"])
             btn.setToolTip(bm["url"])
             btn.clicked.connect(
-                lambda checked, u=bm["url"]: self.add_new_tab(
-                    QUrl(u), "Bookmark"
-                )
+                lambda checked, u=bm["url"]: self.add_new_tab(QUrl(u), "Bookmark")
             )
             self.bookmarks_bar.addWidget(btn)
 
@@ -1546,12 +1849,21 @@ class IE11Browser(QMainWindow):
             self.warn_on_close,
             history,
             self.is_dark_mode,
+            self.web_profile,
+            self.accent_color,
+            self.user_name,
             self,
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             res = dialog.get_settings()
             self.home_url = res["home"]
             self.settings.setValue("home_page", self.home_url)
+
+            self.user_name = res["user_name"]
+            self.settings.setValue("user_name", self.user_name)
+
+            self.accent_color = res["accent_color"]
+            self.settings.setValue("accent_color", self.accent_color)
 
             self.search_engine = res["engine"]
             self.settings.setValue("search_engine", self.search_engine)
@@ -1573,21 +1885,19 @@ class IE11Browser(QMainWindow):
 
             self.adblock_interceptor.enabled = self.is_adblock
 
-            profile = QWebEngineProfile.defaultProfile()
             if self.is_ie_ua:
-                profile.setHttpUserAgent(IE_UA)
+                self.web_profile.setHttpUserAgent(IE_UA)
             else:
-                profile.setHttpUserAgent(MODERN_UA)
+                self.web_profile.setHttpUserAgent(MODERN_UA)
 
             self.apply_theme()
+            self.rebuild_profile_menus()
 
             for i in range(self.web_stack.count()):
                 w = self.web_stack.widget(i)
                 if isinstance(w, QWebEngineView) and isinstance(w.page(), IEWebPage):
                     page = w.page()
-                    if page.custom_url == "ie://welcome":
-                        QTimer.singleShot(0, page.load_welcome_html)
-                    elif page.custom_url == "ie://info":
+                    if page.custom_url == "ie://info":
                         QTimer.singleShot(0, page.load_info_html)
                     elif page.custom_url == "ie://snake":
                         QTimer.singleShot(0, page.load_snake_html)
