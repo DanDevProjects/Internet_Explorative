@@ -13,6 +13,7 @@
 [![macOS](https://img.shields.io/badge/macOS-Primary-black?style=flat-square&logo=apple&logoColor=white)](#system-requirements)
 [![Windows](https://img.shields.io/badge/Windows-Experimental-lightgrey?style=flat-square&logo=windows&logoColor=black)](#system-requirements)
 
+### Internet Explorative will be sunsetted until a new version of PyQt6 comes out. You can definitely continue using it, and it will still be supported, but just no new updates or features. 
 **WARNING:** This project is vibe-coded. While I do my best to keep everything working, bugs and unexpected behavior may still occur.
 
 ## About Internet Explorative
